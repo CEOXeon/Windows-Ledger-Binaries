@@ -1,0 +1,25 @@
+name: Build Windows Ledger
+on: [workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive # Critical for Boost/MPIR/MPFR
+          fetch-depth: 0
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Run Build Script
+        shell: powershell
+        run: ./build.ps1
+
+      - name: Upload Ledger Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ledger-Windows-x64
+          path: ledger.exe
