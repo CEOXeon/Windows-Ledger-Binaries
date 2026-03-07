@@ -44,4 +44,16 @@ cmake -G "Visual Studio 17 2022" -A x64 `
 msbuild /p:Configuration=Release /p:Platform=x64 src\ledger.vcxproj
 
 # 5. Move output to root
-copy "$RepoRoot\ledger\src\Release\ledger.exe" "$RepoRoot\"
+Write-Host "--- Searching for ledger.exe in the entire repository ---"
+# This finds the exe regardless of which 'Release' or 'bin' folder it landed in
+$exePath = Get-ChildItem -Path "$RepoRoot" -Filter "ledger.exe" -Recurse -File | Select-Object -First 1 -ExpandProperty FullName
+
+if ($exePath) {
+    Write-Host "SUCCESS: Found ledger.exe at: $exePath"
+    # Copy it to the root so the GitHub 'Upload' step can find it easily
+    Copy-Item -Path "$exePath" -Destination "$RepoRoot\ledger.exe" -Force
+    Write-Host "Staged ledger.exe to repository root."
+} else {
+    Write-Error "CRITICAL: Build reported success, but no ledger.exe was found anywhere in $RepoRoot"
+    exit 1
+}
