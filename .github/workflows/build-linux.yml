@@ -141,12 +141,18 @@ jobs:
 
       # ---------------------------------------------------------------
       # 6. Create a cmake toolchain file for MinGW cross-compilation.
-      #    CMAKE_PREFIX_PATH includes $DEPS so cmake's find_path and
-      #    find_library locate the gmp/mpfr headers and .a files, and
-      #    the Boost CONFIG-mode package finds its cmake config files.
+      #    The find-root-path modes restrict cmake to search only inside
+      #    the cross-compiled deps prefix and the MinGW sysroot, keeping
+      #    it from accidentally picking up host libraries.
+      #    CMAKE_PREFIX_PATH is passed explicitly on the cmake command
+      #    line (step 7) rather than here to avoid bash heredoc expansion
+      #    issues.
       # ---------------------------------------------------------------
       - name: Create MinGW cmake toolchain file
         run: |
+          # Use an unquoted heredoc so bash expands ${DEPS} → /opt/win-deps.
+          # (cmake's $ENV{} syntax cannot be used here because the heredoc is
+          #  processed by bash, which would expand $ENV to empty string.)
           cat > /tmp/mingw-toolchain.cmake << EOF
           set(CMAKE_SYSTEM_NAME Windows)
           set(CMAKE_SYSTEM_PROCESSOR x86_64)
@@ -155,10 +161,9 @@ jobs:
           set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)
           set(CMAKE_RC_COMPILER  x86_64-w64-mingw32-windres)
 
-          # Tell cmake to search only inside $DEPS (and the MinGW sysroot)
-          # for headers and libraries, not on the host system.
-          set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32 $ENV{DEPS})
-          set(CMAKE_PREFIX_PATH   $ENV{DEPS})
+          # Tell cmake to search only inside the cross-compiled deps prefix
+          # (and the MinGW sysroot) for headers and libraries, not the host.
+          set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32 ${DEPS})
           set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
           set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
           set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
@@ -174,6 +179,7 @@ jobs:
           cmake -S . -B build \
             -DCMAKE_TOOLCHAIN_FILE=/tmp/mingw-toolchain.cmake \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$DEPS" \
             -DUSE_PYTHON=OFF \
             -DBUILD_LIBRARY=OFF \
             -DBUILD_DOCS=OFF \
