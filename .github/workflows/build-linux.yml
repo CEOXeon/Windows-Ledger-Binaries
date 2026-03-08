@@ -17,6 +17,7 @@ env:
   MPFR_VERSION: "4.2.1"
   BOOST_VERSION: "1.86.0"
   BOOST_VERSION_UNDERSCORE: "1_86_0"
+  UTFCPP_VERSION: "4.0.5"
 
 jobs:
   build:
@@ -92,7 +93,18 @@ jobs:
           make install
 
       # ---------------------------------------------------------------
-      # 5. Build Boost for Windows x64 (replaces the boost submodule)
+      # 5. Install utfcpp (header-only – no cross-compile needed)
+      # ---------------------------------------------------------------
+      - name: Install utfcpp headers
+        working-directory: /tmp
+        run: |
+          wget "https://github.com/nemtrif/utfcpp/archive/refs/tags/v${UTFCPP_VERSION}.tar.gz" \
+            -O "utfcpp-${UTFCPP_VERSION}.tar.gz"
+          tar xf "utfcpp-${UTFCPP_VERSION}.tar.gz"
+          cp -r "utfcpp-${UTFCPP_VERSION}/source/." "$DEPS/include/"
+
+      # ---------------------------------------------------------------
+      # 6. Build Boost for Windows x64 (replaces the boost submodule)
       #
       #    We build only the components that ledger needs:
       #      date_time, filesystem, iostreams, regex, system,
@@ -140,7 +152,7 @@ jobs:
             -j"$(nproc)"
 
       # ---------------------------------------------------------------
-      # 6. Create a cmake toolchain file for MinGW cross-compilation.
+      # 7. Create a cmake toolchain file for MinGW cross-compilation.
       #    The find-root-path modes restrict cmake to search only inside
       #    the cross-compiled deps prefix and the MinGW sysroot, keeping
       #    it from accidentally picking up host libraries.
@@ -171,7 +183,7 @@ jobs:
           EOF
 
       # ---------------------------------------------------------------
-      # 7. Configure ledger with cmake
+      # 8. Configure ledger with cmake
       # ---------------------------------------------------------------
       - name: Configure Ledger
         working-directory: ledger
@@ -180,6 +192,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=/tmp/mingw-toolchain.cmake \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$DEPS" \
+            -DUTFCPP_PATH="$DEPS/include" \
             -DUSE_PYTHON=OFF \
             -DBUILD_LIBRARY=OFF \
             -DBUILD_DOCS=OFF \
@@ -188,14 +201,14 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++"
 
       # ---------------------------------------------------------------
-      # 8. Build
+      # 9. Build
       # ---------------------------------------------------------------
       - name: Build Ledger
         working-directory: ledger
         run: cmake --build build --target ledger -j"$(nproc)"
 
       # ---------------------------------------------------------------
-      # 9. Stage the output binary at the repo root for upload.
+      # 10. Stage the output binary at the repo root for upload.
       #    CMakeLists.txt sets CMAKE_RUNTIME_OUTPUT_DIRECTORY to
       #    PROJECT_BINARY_DIR, so the exe lands in ledger/build/.
       # ---------------------------------------------------------------
@@ -211,7 +224,7 @@ jobs:
           cp "$EXE" ledger.exe
 
       # ---------------------------------------------------------------
-      # 10. Upload artifact
+      # 11. Upload artifact
       # ---------------------------------------------------------------
       - name: Upload Ledger Windows binary
         uses: actions/upload-artifact@v4
