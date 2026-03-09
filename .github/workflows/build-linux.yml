@@ -183,7 +183,28 @@ jobs:
           EOF
 
       # ---------------------------------------------------------------
-      # 8. Configure ledger with cmake
+      # 8. Patch ledger's CMakeLists.txt to link MPFR before GMP.
+      #    GNU ld processes static archives left-to-right: libmpfr.a
+      #    depends on GMP symbols, so -lmpfr must precede -lgmp.
+      #    Upstream ledger has the order reversed (GMP first, MPFR
+      #    second), which causes hundreds of "undefined reference"
+      #    errors at link time when cross-compiling for Windows.
+      # ---------------------------------------------------------------
+      - name: Patch ledger link order (MPFR before GMP)
+        working-directory: ledger
+        run: |
+          python3 -c '
+          content = open("CMakeLists.txt").read()
+          old = "  target_link_libraries(${_target} ${GMP_LIB})\n  target_link_libraries(${_target} ${MPFR_LIB})"
+          new = "  target_link_libraries(${_target} ${MPFR_LIB})\n  target_link_libraries(${_target} ${GMP_LIB})"
+          assert old in content, "ERROR: expected GMP-before-MPFR pattern not found in CMakeLists.txt"
+          open("CMakeLists.txt", "w").write(content.replace(old, new))
+          '
+          # Verify the swap took effect
+          grep -n "target_link_libraries.*GMP_LIB\|target_link_libraries.*MPFR_LIB" CMakeLists.txt
+
+      # ---------------------------------------------------------------
+      # 9. Configure ledger with cmake
       # ---------------------------------------------------------------
       - name: Configure Ledger
         working-directory: ledger
@@ -199,17 +220,17 @@ jobs:
             -DBoost_USE_STATIC_LIBS=ON \
             -DBoost_USE_STATIC_RUNTIME=ON \
             -DCMAKE_CXX_FLAGS="-DLITTLE_ENDIAN=1234 -DBIG_ENDIAN=4321 -DBYTE_ORDER=1234" \
-            -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++ -L/opt/win-deps/lib -Wl,--start-group -lmpfr -lgmp -Wl,--end-group"
+            -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++"
 
       # ---------------------------------------------------------------
-      # 9. Build
+      # 10. Build
       # ---------------------------------------------------------------
       - name: Build Ledger
         working-directory: ledger
         run: cmake --build build --target ledger -j"$(nproc)"
 
       # ---------------------------------------------------------------
-      # 10. Stage the output binary at the repo root for upload.
+      # 11. Stage the output binary at the repo root for upload.
       #    CMakeLists.txt sets CMAKE_RUNTIME_OUTPUT_DIRECTORY to
       #    PROJECT_BINARY_DIR, so the exe lands in ledger/build/.
       # ---------------------------------------------------------------
@@ -225,7 +246,7 @@ jobs:
           cp "$EXE" ledger.exe
 
       # ---------------------------------------------------------------
-      # 11. Upload artifact
+      # 12. Upload artifact
       # ---------------------------------------------------------------
       - name: Upload Ledger Windows binary
         uses: actions/upload-artifact@v4
